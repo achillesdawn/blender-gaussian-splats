@@ -7,8 +7,10 @@ from bpy.props import (
     EnumProperty,
     PointerProperty,
 )
+from bpy.types import UILayout
 
 from pathlib import Path
+from typing import cast
 from .splats import SNA_OT_IMPORT_PLY
 
 bl_info = {
@@ -48,7 +50,8 @@ class GSPLAT_PT_VIEWPORT_SIDE_PANEL(bpy.types.Panel):
         return getattr(bpy.context.scene, Config.addon_global_var_name)
 
     def draw(self, context):
-        layout = self.layout
+        layout = cast(UILayout, self.layout)
+
         props = self.get_props()
 
         col = layout.column()

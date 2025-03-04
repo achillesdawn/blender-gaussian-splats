@@ -1,0 +1,1 @@
+zip -r gaussian_splat.zip gaussian_splat
