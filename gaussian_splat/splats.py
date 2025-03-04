@@ -1,8 +1,11 @@
 import bpy
 from bpy_extras.io_utils import ImportHelper
+from bpy.types import Mesh, FloatVectorAttribute, ByteColorAttribute, NodesModifier
 
 from .plyfile import PlyData
 from pathlib import Path
+from typing import cast
+
 import numpy as np
 
 import os
@@ -11,13 +14,16 @@ import math
 
 def RS_matrix(quat, scale):
     matrix = []
+
     length = 1 / math.sqrt(
         quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3]
     )
+
     x = quat[0] * length
     y = quat[1] * length
     z = quat[2] * length
     w = quat[3] * length
+
     matrix.append(scale[0] * (1 - 2 * (z * z + w * w)))
     matrix.append(scale[0] * (2 * (y * z + x * w)))
     matrix.append(scale[0] * (2 * (y * w - x * z)))
@@ -27,6 +33,7 @@ def RS_matrix(quat, scale):
     matrix.append(scale[2] * (2 * (y * w + x * z)))
     matrix.append(scale[2] * (2 * (z * w - x * y)))
     matrix.append(scale[2] * (1 - 2 * (y * y + z * z)))
+
     return matrix
 
 
@@ -37,7 +44,7 @@ class SNA_OT_IMPORT_PLY(bpy.types.Operator, ImportHelper):
 
     bl_options = {"REGISTER", "UNDO"}
 
-    filter_glob: bpy.props.StringProperty(default="*.ply", options={"HIDDEN"}) # type: ignore
+    filter_glob: bpy.props.StringProperty(default="*.ply", options={"HIDDEN"})  # type: ignore
 
     @classmethod
     def poll(cls, context):
@@ -148,7 +155,8 @@ class SNA_OT_IMPORT_PLY(bpy.types.Operator, ImportHelper):
             indices.append((b, b + 1, b + 2))
             indices.append((b, b + 2, b + 3))
 
-        mesh: bpy.types.Mesh = bpy.data.meshes.new(name=object_name)
+        mesh: Mesh = bpy.data.meshes.new(name=object_name)
+
         mesh.from_pydata(vertices, [], indices)
 
         ob: bpy.types.Object = bpy.data.objects.new(object_name, mesh)
@@ -206,14 +214,16 @@ class SNA_OT_IMPORT_PLY(bpy.types.Operator, ImportHelper):
             color[8 * i + 6] = B
             color[8 * i + 7] = A
 
-        center_attr: bpy.types.FloatVectorAttribute = mesh.attributes.new(
-            name="center", type="FLOAT_VECTOR", domain="FACE"
+        center_attr = cast(
+            FloatVectorAttribute,
+            mesh.attributes.new(name="center", type="FLOAT_VECTOR", domain="FACE"),
         )
 
         center_attr.data.foreach_set("vector", center_data)
 
-        color_attr: bpy.types.ByteColorAttribute = mesh.attributes.new(
-            name="color", type="FLOAT_COLOR", domain="FACE"
+        color_attr = cast(
+            ByteColorAttribute,
+            mesh.attributes.new(name="color", type="FLOAT_COLOR", domain="FACE"),
         )
 
         color_attr.data.foreach_set("color", color)
@@ -224,21 +234,36 @@ class SNA_OT_IMPORT_PLY(bpy.types.Operator, ImportHelper):
             )
             Vrk_attr.data.foreach_set("value", data)
 
-        # Set up node group and material
-        node_group = bpy.data.node_groups["KIRI_3DGS_Render_GN"]
+        
+        render_nodes = bpy.data.node_groups["render"]
+        sort_nodes = bpy.data.node_groups["sort"]
 
-        node_modifier: bpy.types.NodesModifier = ob.modifiers.new(
-            name="KIRI_3DGS_Render_GN", type="NODES"
+        render_modifier = cast(
+            NodesModifier, ob.modifiers.new(name="gaussian_render", type="NODES")
         )
 
-        node_modifier.node_group = node_group
+        render_modifier.node_group = render_nodes
 
-        material = bpy.materials.get("gaussian_splat_material")
-        ob.data.materials.append(material)
+        sort_modifier = cast(
+            NodesModifier, ob.modifiers.new(name="gaussian_sort", type="NODES")
+        )
 
-        bpy.context.collection.objects.link(ob)
+        sort_modifier.node_group = sort_nodes
 
-        bpy.context.view_layer.objects.active = ob
+
+        material = bpy.data.materials.get("gaussian_splat_material")
+
+        assert material
+        
+        material.surface_render_method = "BLENDED"
+        mesh.materials.append(material)
+        
+        assert context.collection
+        assert context.view_layer
+
+        context.collection.objects.link(ob)
+
+        context.view_layer.objects.active = ob
 
         ob.select_set(True)
 
